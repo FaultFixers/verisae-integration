@@ -1,0 +1,56 @@
+[
+    {
+        u'mimeType': u'multipart/alternative',
+        u'body': {
+            u'size': 0
+        },
+        u'partId': u'0',
+        u'filename': u'',
+        u'headers': [
+            {
+                u'name': u'Content-Type',
+                u'value': u'multipart/alternative; boundary="----=_Part_58969_1311848117.1551200905067"'
+            }
+        ],
+        u'parts': [
+            {
+                u'mimeType': u'text/plain',
+                u'headers': [
+                    {
+                        u'name': u'Content-Type',
+                        u'value': u'text/plain; charset=utf-8'
+                    },
+                    {
+                        u'name': u'Content-Transfer-Encoding',
+                        u'value': u'quoted-printable'
+                    }
+                ],
+                u'body': {
+                    u'data': u'REMOVED',
+                    u'size': 1520
+                },
+                u'partId': u'0.0',
+                u'filename': u''
+            },
+            {
+                u'mimeType': u'text/html',
+                u'headers': [
+                    {
+                        u'name': u'Content-Type',
+                        u'value': u'text/html; charset=utf-8'
+                    },
+                    {
+                        u'name': u'Content-Transfer-Encoding',
+                        u'value': u'quoted-printable'
+                    }
+                ],
+                u'body': {
+                    u'data': u'REMOVED',
+                    u'size': 11007
+                },
+                u'partId': u'0.1',
+                u'filename': u''
+            }
+        ]
+    }
+]
