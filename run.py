@@ -13,8 +13,8 @@ with open('account-map.json') as f:
     account_map = json.load(f)
 
 
-def find_faultfixers_building_by_account_and_name(account_id, expected_building_name_format, site_number):
-    response_json = make_api_request('GET', '/buildings?accountId=' + account_id)
+def find_faultfixers_building_by_account_and_name(account_ids, expected_building_name_format, site_number):
+    response_json = make_api_request('GET', '/buildings?account=' + ','.join(account_ids))
     expected_building_name_format_regex = re.compile(expected_building_name_format.replace('SITE_NUMBER', site_number))
 
     for result in response_json['results']:
@@ -164,7 +164,7 @@ def handle_work_order_email(message, subject, doc):
     faultfixers_description = 'New work order via Verisae\n\n%s\n\nEquipment details:\n%s\n\nContact details:\n%s\n\nVerisae access code: %s\n\nVerisae link: %s' % (description, equipment_details, client_contact_details, access_code, start_link)
 
     faultfixers_building = find_faultfixers_building_by_account_and_name(
-        faultfixers_mappings_for_client['accountId'],
+        faultfixers_mappings_for_client['accountIds'],
         faultfixers_mappings_for_client['buildingNameFormat'],
         site_number
     )
@@ -215,7 +215,7 @@ def handle_quote_required_email(message, subject, doc):
     faultfixers_description = 'Quote required via Verisae\n\n%s\n\nEquipment details:\n%s\n\nContact details:\n%s' % (description, equipment_details, client_contact_details)
 
     faultfixers_building = find_faultfixers_building_by_account_and_name(
-        faultfixers_mappings_for_client['accountId'],
+        faultfixers_mappings_for_client['accountIds'],
         faultfixers_mappings_for_client['buildingNameFormat'],
         site_number
     )
@@ -253,6 +253,8 @@ def handle_quote_authorised_email(message, subject, doc):
     if not quote_details:
         raise 'No quote details for work order ' + work_order_number
 
+    # @todo - check if ticket is in correct account.
+
     comment = 'Quote authorised via Verisae\n\nQuote details:\n%s\n\nVerisae access code: %s\n\nVerisae link: %s' % (quote_details, access_code, start_link)
 
     payload = {
@@ -280,6 +282,8 @@ def handle_deescalation_email(message, subject, doc):
     details = doc('td.Text2:contains("De-escalation User:")').text().strip()
     if not details:
         raise 'No de-escalation details for work order ' + work_order_number
+
+    # @todo - check if ticket is in correct account.
 
     comment = 'De-escalation via Verisae\n\n%s\n\n%s' % (level, details)
 
@@ -317,6 +321,8 @@ def handle_message(message, subject):
 
 
 def make_api_request(method, endpoint, payload = None):
+    print 'Making API request: %s %s' % (method, endpoint)
+
     headers = {
         'authorization': os.getenv('API_AUTHORIZATION_HEADER'),
         'accept': 'application/vnd.faultfixers.v11+json',

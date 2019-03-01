@@ -1,6 +1,8 @@
 {
     "some-verisae-account-name": {
-        "accountId": "some-faultfixers-account-id",
+        "accountIds": [
+            "some-faultfixers-account-id"
+        ],
         "buildingNameFormat": "^Company Name SITE_NUMBER \\(.+\\)$"
     }
 }
