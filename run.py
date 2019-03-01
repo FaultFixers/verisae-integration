@@ -237,7 +237,35 @@ def handle_quote_required_email(message, doc):
 
 
 def handle_quote_authorised_email(message, doc):
-    raise '@todo - handle_quote_authorised_email'
+    work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
+    if not work_order_number:
+        raise 'No work order number'
+
+    access_code = doc('.WOIDblockTitle:contains("Access Code")').parent().parent().find('td.WOID').text().strip()
+    if not access_code:
+        raise 'No access code for work order ' + work_order_number
+
+    start_link = doc('a:contains("subcontractor link")').attr('href')
+    if not start_link:
+        raise 'No start link for work order ' + work_order_number
+
+    quote_details = doc('td.Text2:contains("Contractor Quote No.:")').text().strip().replace('\n\n', '\n')
+    if not quote_details:
+        raise 'No quote details for work order ' + work_order_number
+
+    comment = 'Quote authorised via Verisae\n\nQuote details:\n%s\n\nVerisae access code: %s\n\nVerisae link: %s' % (quote_details, access_code, start_link)
+
+    # @todo - check ticket in FF is for the same account as the email.
+
+    payload = {
+        'comment': comment,
+        'commentVisibility': 'INTERNAL_TO_TEAM',
+        'updaterDescription': 'Verisae integration',
+    }
+
+    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+
+    print 'Updated FaultFixers ticket %s with quote approval' % response_json['ticket']['id']
 
 
 def handle_escalation_email(message, doc):
