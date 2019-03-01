@@ -1,7 +1,13 @@
 FaultFixers Email Replies Handler
 ---------------------------------
 
-When a ticket update email is replied to, the reply to updates@faultfixers.com is handled by this repository.
+Parses emails from Verisae and pushes the information into FaultFixers.
+
+The email types supported are:
+* New work order
+* Quote requested
+* Quote authorised
+* Work order de-escalation
 
 Setup
 =====

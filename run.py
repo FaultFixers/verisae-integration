@@ -132,7 +132,7 @@ subject_regex_for_deescalation = re.compile('^' + account_and_site_name + ', Wor
 subject_regex_for_escalation = re.compile('^' + account_and_site_name + ', Work Order \\d+, Escalation: .+ Level$')
 
 
-def handle_work_order_email(message, doc):
+def handle_work_order_email(message, subject, doc):
     work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
     if not work_order_number:
         raise 'No work order number'
@@ -185,7 +185,7 @@ def handle_work_order_email(message, doc):
     print 'Created FaultFixers ticket %s' % response_json['ticket']['id']
 
 
-def handle_quote_required_email(message, doc):
+def handle_quote_required_email(message, subject, doc):
     work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
     if not work_order_number:
         raise 'No work order number'
@@ -236,7 +236,7 @@ def handle_quote_required_email(message, doc):
     print 'Created FaultFixers ticket %s' % response_json['ticket']['id']
 
 
-def handle_quote_authorised_email(message, doc):
+def handle_quote_authorised_email(message, subject, doc):
     work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
     if not work_order_number:
         raise 'No work order number'
@@ -255,8 +255,6 @@ def handle_quote_authorised_email(message, doc):
 
     comment = 'Quote authorised via Verisae\n\nQuote details:\n%s\n\nVerisae access code: %s\n\nVerisae link: %s' % (quote_details, access_code, start_link)
 
-    # @todo - check ticket in FF is for the same account as the email.
-
     payload = {
         'comment': comment,
         'commentVisibility': 'INTERNAL_TO_TEAM',
@@ -268,33 +266,52 @@ def handle_quote_authorised_email(message, doc):
     print 'Updated FaultFixers ticket %s with quote approval' % response_json['ticket']['id']
 
 
-def handle_escalation_email(message, doc):
+def handle_escalation_email(message, subject, doc):
     raise '@todo - handle_escalation_email'
 
 
-def handle_deescalation_email(message, doc):
-    raise '@todo - handle_deescalation_email'
+def handle_deescalation_email(message, subject, doc):
+    level = subject.split('De-escalation: ')[1].strip()
+
+    work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
+    if not work_order_number:
+        raise 'No work order number'
+
+    details = doc('td.Text2:contains("De-escalation User:")').text().strip()
+    if not details:
+        raise 'No de-escalation details for work order ' + work_order_number
+
+    comment = 'De-escalation via Verisae\n\n%s\n\n%s' % (level, details)
+
+    payload = {
+        'comment': comment,
+        'commentVisibility': 'INTERNAL_TO_TEAM',
+        'updaterDescription': 'Verisae integration',
+    }
+
+    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+
+    print 'Updated FaultFixers ticket %s with de-escalation' % response_json['ticket']['id']
 
 
-def handle_message(message):
+def handle_message(message, subject):
     if 'parts' in message['payload']:
         full_html = get_body_by_mime_type(message, 'text/html')
     else:
         raise 'Unsupported email format'
 
-    subject = get_header(message, 'Subject')
     email_doc = pq(full_html)
 
     if subject_regex_for_work_order.match(subject):
-        handle_work_order_email(message, email_doc)
+        handle_work_order_email(message, subject, email_doc)
     elif subject_regex_for_quote_required.match(subject):
-        handle_quote_required_email(message, email_doc)
+        handle_quote_required_email(message, subject, email_doc)
     elif subject_regex_for_quote_authorised.match(subject):
-        handle_quote_authorised_email(message, email_doc)
+        handle_quote_authorised_email(message, subject, email_doc)
     elif subject_regex_for_deescalation.match(subject):
-        handle_deescalation_email(message, email_doc)
+        handle_deescalation_email(message, subject, email_doc)
     elif subject_regex_for_escalation.match(subject):
-        handle_escalation_email(message, email_doc)
+        handle_escalation_email(message, subject, email_doc)
     else:
         raise 'Email\'s subject is not in supported format: %s' % subject
 
@@ -327,10 +344,11 @@ def run():
         return
 
     for list_message in list_messages:
-        print 'Getting message %s' % list_message['id']
         message = get_message(service, 'me', list_message['id'])
-        handle_message(message)
-        print 'Handled message %s, subject: %s' % (list_message['id'], get_header(message, 'Subject'))
+        subject = get_header(message, 'Subject')
+        print 'Got message %s, subject: %s' % (list_message['id'], subject)
+        handle_message(message, subject)
+        print 'Handled message %s, subject: %s' % (list_message['id'], subject)
 
         modify_message(service, 'me', list_message['id'], {
             'addLabelIds': [os.getenv('HANDLED_LABEL_ID')],
@@ -365,6 +383,7 @@ except errors.HttpError, error:
     post_error_to_slack('Error in Verisae integration', error)
 except requests.exceptions.HTTPError, error:
     print 'An error occurred: %s' % error
+    print 'response: %s' % error.response
     print 'json: %s' % error.response.json()
     post_error_to_slack('Error in Verisae integration', error)
 except:
