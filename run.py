@@ -135,7 +135,7 @@ subject_regex_for_escalation = re.compile('^' + account_and_site_name + ', Work 
 def handle_work_order_email(message, doc):
     work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
     if not work_order_number:
-        raise 'No work order number ' + work_order_number
+        raise 'No work order number'
 
     access_code = doc('.WOIDblockTitle:contains("Access Code")').parent().parent().find('td.WOID').text().strip()
     start_link = doc('a:contains("subcontractor link")').attr('href')
@@ -186,7 +186,54 @@ def handle_work_order_email(message, doc):
 
 
 def handle_quote_required_email(message, doc):
-    raise '@todo - handle_quote_required_email'
+    work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
+    if not work_order_number:
+        raise 'No work order number'
+
+    client_contact_details = doc('td.Text2[width="325"]').eq(0).find('p').text().strip()
+    recipient_company = doc('td.Text2[width="325"]').eq(1).find('.BlockSubtitle').text().strip()
+    equipment_details = doc('td.Text2[width="325"]').eq(2).text().strip()
+    category = equipment_details.split(',')[0]
+    service_request_location = doc('td.Text2[width="325"]').eq(3)
+    account_and_building_name = service_request_location.find('.BlockSubtitle').text().strip()
+    account_name = account_and_building_name.split(',')[0].strip()
+    site_number = account_and_building_name.split(', ')[1].split(' ')[0].strip()
+    description = doc('td.Text2 b:contains("Work Order Type:")').parent().text().strip()
+
+    if not description:
+        raise 'No description for work order ' + work_order_number
+    if not site_number:
+        raise 'No site_number for work order ' + work_order_number
+
+    if '\nLocation:' in equipment_details:
+        location_description = equipment_details.split('Location:')[1].strip().split('\n')[0]
+    else:
+        location_description = None
+
+    faultfixers_category_name = category_map[category]
+    faultfixers_mappings_for_client = account_map[account_name]
+    faultfixers_description = 'Quote required via Verisae\n\n%s\n\nEquipment details:\n%s\n\nContact details:\n%s' % (description, equipment_details, client_contact_details)
+
+    faultfixers_building = find_faultfixers_building_by_account_and_name(
+        faultfixers_mappings_for_client['accountId'],
+        faultfixers_mappings_for_client['buildingNameFormat'],
+        site_number
+    )
+
+    payload = {
+        'building': faultfixers_building['id'],
+        'category': faultfixers_category_name,
+        'description': faultfixers_description,
+        'locationDescription': location_description,
+        'customFriendlyId': work_order_number,
+        'reporterDescription': 'Verisae integration',
+        'type': 'REACTIVE',
+        'privacy': 'PRIVATE',
+    }
+
+    response_json = make_api_request('POST', '/tickets', payload)
+
+    print 'Created FaultFixers ticket %s' % response_json['ticket']['id']
 
 
 def handle_quote_authorised_email(message, doc):
