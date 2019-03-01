@@ -1,5 +1,5 @@
-FaultFixers Email Replies Handler
----------------------------------
+FaultFixers Verisae Email Integration
+-------------------------------------
 
 Parses emails from Verisae and pushes the information into FaultFixers.
 
