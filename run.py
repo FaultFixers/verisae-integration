@@ -13,17 +13,63 @@ with open('account-map.json') as f:
     account_map = json.load(f)
 
 
-def find_faultfixers_building_by_account_and_name(account_ids, expected_building_name_format, site_number):
+def find_faultfixers_buildings_by_account_ids(account_ids):
     response_json = make_api_request('GET', '/buildings?account=' + ','.join(account_ids))
-    expected_building_name_format_regex = re.compile(expected_building_name_format.replace('SITE_NUMBER', site_number))
+    return map(lambda result: result['building'], response_json['results'])
 
-    for result in response_json['results']:
-        building = result['building']
 
-        if expected_building_name_format_regex.match(building['name']):
+def find_faultfixers_building_by_account_and_name(account_ids, expected_building_name_format, site_number):
+    buildings = find_faultfixers_buildings_by_account_ids(account_ids)
+    expected_name_regex = re.compile(expected_building_name_format.replace('SITE_NUMBER', site_number))
+
+    for building in buildings:
+        if expected_name_regex.match(building['name']):
             return building
 
-    raise 'Could not find FaultFixers building with site number ' + site_number + ' and name format ' + expected_building_name_format_regex.pattern
+    raise Exception(
+        'Could not find FaultFixers building with name format %s in accounts %s' %
+        (expected_name_regex.pattern, ','.join(account_ids))
+    )
+
+
+def find_faultfixers_ticket_by_id(id):
+    if not id:
+        raise Exception('No ticket ID given')
+
+    response_json = make_api_request('GET', '/tickets/' + id)
+    ticket = response_json['ticket']
+    ticket['building'] = response_json['building']
+    return ticket
+
+
+def get_faultfixers_category_name_by_verisae_name(verisae_name):
+    if verisae_name not in category_map:
+        raise Exception('Category name is not in the map: ' + verisae_name)
+
+    return category_map[verisae_name]
+
+
+def get_account_mappings_by_name(account_name):
+    if account_name not in account_map:
+        raise Exception('Account name is not in mapping: ' + account_name)
+
+    return account_map[account_name]
+
+
+def ensure_building_is_owned_by_account_name(building_id, account_name):
+    if not building_id:
+        raise Exception('No building ID given')
+    if not account_name:
+        raise Exception('No account name given')
+
+    account_mappings = get_account_mappings_by_name(account_name)
+    buildings = find_faultfixers_buildings_by_account_ids(account_mappings['accountIds'])
+
+    for building in buildings:
+        if building['id'] == building_id:
+            return
+
+    raise Exception('Building %s is not owned by %s' % (building_id, account_name))
 
 
 def list_messages_matching_query(service, user_id, query=''):
@@ -100,7 +146,7 @@ def get_header(message, header_name):
     for header in message['payload']['headers']:
         if header['name'] == header_name:
             return header['value']
-    raise 'Header not present: ' + header_name
+    raise Exception('Header not present: ' + header_name)
 
 
 def decode_base_64_data(data):
@@ -115,7 +161,7 @@ def get_part_by_mime_type(parts, mime_type):
         if part['mimeType'] == 'multipart/alternative':
             return get_part_by_mime_type(part['parts'], mime_type)
 
-    raise 'Part not present with mime-type: ' + mime_type
+    raise Exception('Part not present with mime-type: ' + mime_type)
 
 
 def get_body_by_mime_type(message, mime_type):
@@ -135,12 +181,12 @@ subject_regex_for_escalation = re.compile('^' + account_and_site_name + ', Work 
 def handle_work_order_email(message, subject, doc):
     work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
     if not work_order_number:
-        raise 'No work order number'
+        raise Exception('No work order number')
 
     access_code = doc('.WOIDblockTitle:contains("Access Code")').parent().parent().find('td.WOID').text().strip()
     start_link = doc('a:contains("subcontractor link")').attr('href')
     client_contact_details = doc('td.Text2[width="325px"]').eq(0).find('p').text().strip()
-    recipient_company = doc('td.Text2[width="325px"]').eq(1).find('.BlockSubtitle').text().strip()
+    contractor_company = doc('td.Text2[width="325px"]').eq(1).find('.BlockSubtitle').text().strip()
     equipment_details = doc('td.Text2[width="325px"]').eq(2).text().strip()
     category = equipment_details.split(',')[0]
     service_request_location = doc('td.Text2[width="325px"]').eq(3)
@@ -150,17 +196,17 @@ def handle_work_order_email(message, subject, doc):
     description = doc('td.Text2 b:contains("Work Order Type:")').parent().text().strip()
 
     if not description:
-        raise 'No description for work order ' + work_order_number
+        raise Exception('No description for work order ' + work_order_number)
     if not site_number:
-        raise 'No site_number for work order ' + work_order_number
+        raise Exception('No site_number for work order ' + work_order_number)
 
     if '\nLocation:' in equipment_details:
         location_description = equipment_details.split('Location:')[1].strip().split('\n')[0]
     else:
         location_description = None
 
-    faultfixers_category_name = category_map[category]
-    faultfixers_mappings_for_client = account_map[account_name]
+    faultfixers_category_name = get_faultfixers_category_name_by_verisae_name(category)
+    faultfixers_mappings_for_client = get_account_mappings_by_name(account_name)
     faultfixers_description = 'New work order via Verisae\n\n%s\n\nEquipment details:\n%s\n\nContact details:\n%s\n\nVerisae access code: %s\n\nVerisae link: %s' % (description, equipment_details, client_contact_details, access_code, start_link)
 
     faultfixers_building = find_faultfixers_building_by_account_and_name(
@@ -188,10 +234,10 @@ def handle_work_order_email(message, subject, doc):
 def handle_quote_required_email(message, subject, doc):
     work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
     if not work_order_number:
-        raise 'No work order number'
+        raise Exception('No work order number')
 
     client_contact_details = doc('td.Text2[width="325"]').eq(0).find('p').text().strip()
-    recipient_company = doc('td.Text2[width="325"]').eq(1).find('.BlockSubtitle').text().strip()
+    contractor_company = doc('td.Text2[width="325"]').eq(1).find('.BlockSubtitle').text().strip()
     equipment_details = doc('td.Text2[width="325"]').eq(2).text().strip()
     category = equipment_details.split(',')[0]
     service_request_location = doc('td.Text2[width="325"]').eq(3)
@@ -201,17 +247,17 @@ def handle_quote_required_email(message, subject, doc):
     description = doc('td.Text2 b:contains("Work Order Type:")').parent().text().strip()
 
     if not description:
-        raise 'No description for work order ' + work_order_number
+        raise Exception('No description for work order ' + work_order_number)
     if not site_number:
-        raise 'No site_number for work order ' + work_order_number
+        raise Exception('No site_number for work order ' + work_order_number)
 
     if '\nLocation:' in equipment_details:
         location_description = equipment_details.split('Location:')[1].strip().split('\n')[0]
     else:
         location_description = None
 
-    faultfixers_category_name = category_map[category]
-    faultfixers_mappings_for_client = account_map[account_name]
+    faultfixers_category_name = get_faultfixers_category_name_by_verisae_name(category)
+    faultfixers_mappings_for_client = get_account_mappings_by_name(account_name)
     faultfixers_description = 'Quote required via Verisae\n\n%s\n\nEquipment details:\n%s\n\nContact details:\n%s' % (description, equipment_details, client_contact_details)
 
     faultfixers_building = find_faultfixers_building_by_account_and_name(
@@ -239,21 +285,23 @@ def handle_quote_required_email(message, subject, doc):
 def handle_quote_authorised_email(message, subject, doc):
     work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
     if not work_order_number:
-        raise 'No work order number'
+        raise Exception('No work order number')
 
     access_code = doc('.WOIDblockTitle:contains("Access Code")').parent().parent().find('td.WOID').text().strip()
     if not access_code:
-        raise 'No access code for work order ' + work_order_number
+        raise Exception('No access code for work order ' + work_order_number)
 
     start_link = doc('a:contains("subcontractor link")').attr('href')
     if not start_link:
-        raise 'No start link for work order ' + work_order_number
+        raise Exception('No start link for work order ' + work_order_number)
 
     quote_details = doc('td.Text2:contains("Contractor Quote No.:")').text().strip().replace('\n\n', '\n')
     if not quote_details:
-        raise 'No quote details for work order ' + work_order_number
+        raise Exception('No quote details for work order ' + work_order_number)
 
-    # @todo - check if ticket is in correct account.
+    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    contractor_company = doc('td.Text2[width="325"]').eq(1).find('.BlockSubtitle').text().strip()
+    ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
     comment = 'Quote authorised via Verisae\n\nQuote details:\n%s\n\nVerisae access code: %s\n\nVerisae link: %s' % (quote_details, access_code, start_link)
 
@@ -269,7 +317,7 @@ def handle_quote_authorised_email(message, subject, doc):
 
 
 def handle_escalation_email(message, subject, doc):
-    raise '@todo - handle_escalation_email'
+    raise Exception('@todo - handle_escalation_email')
 
 
 def handle_deescalation_email(message, subject, doc):
@@ -277,13 +325,15 @@ def handle_deescalation_email(message, subject, doc):
 
     work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
     if not work_order_number:
-        raise 'No work order number'
+        raise Exception('No work order number')
 
     details = doc('td.Text2:contains("De-escalation User:")').text().strip()
     if not details:
-        raise 'No de-escalation details for work order ' + work_order_number
+        raise Exception('No de-escalation details for work order ' + work_order_number)
 
-    # @todo - check if ticket is in correct account.
+    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    contractor_company = doc('td.Text2[colspan="3"]').eq(2).text().strip().split('\n')[0].strip()
+    ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
     comment = 'De-escalation via Verisae\n\n%s\n\n%s' % (level, details)
 
@@ -302,7 +352,7 @@ def handle_message(message, subject):
     if 'parts' in message['payload']:
         full_html = get_body_by_mime_type(message, 'text/html')
     else:
-        raise 'Unsupported email format'
+        raise Exception('Unsupported email format')
 
     email_doc = pq(full_html)
 
@@ -317,7 +367,7 @@ def handle_message(message, subject):
     elif subject_regex_for_escalation.match(subject):
         handle_escalation_email(message, subject, email_doc)
     else:
-        raise 'Email\'s subject is not in supported format: %s' % subject
+        raise Exception('Email\'s subject is not in supported format: %s' % subject)
 
 
 def make_api_request(method, endpoint, payload = None):
@@ -349,6 +399,8 @@ def run():
     if len(list_messages) == 0:
         return
 
+    print
+
     for list_message in list_messages:
         message = get_message(service, 'me', list_message['id'])
         subject = get_header(message, 'Subject')
@@ -360,6 +412,8 @@ def run():
             'addLabelIds': [os.getenv('HANDLED_LABEL_ID')],
             'removeLabelIds': ['UNREAD'],
         })
+
+        print
 
 
 def post_error_to_slack(title, error):
@@ -393,6 +447,6 @@ except requests.exceptions.HTTPError, error:
     print 'json: %s' % error.response.json()
     post_error_to_slack('Error in Verisae integration', error)
 except:
-    print 'Unexpected error:', sys.exc_info()[0]
-    post_error_to_slack('Error in Verisae integration', sys.exc_info()[0])
+    print 'Unexpected error:', sys.exc_info()[1]
+    post_error_to_slack('Error in Verisae integration', sys.exc_info()[1])
     raise
