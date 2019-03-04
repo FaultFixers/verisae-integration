@@ -100,6 +100,9 @@ def list_messages_matching_query(service, user_id, query=''):
             userId=user_id, q=query, pageToken=page_token).execute()
         messages.extend(response['messages'])
 
+    # Sort by oldest first. Gmail always returns with the newest first -- this is not configurable.
+    messages.reverse()
+
     return messages
 
 
