@@ -180,6 +180,7 @@ subject_regex_for_deescalation = re.compile('^' + account_and_site_name + ', Wor
 # @todo - see what the escalation email subject actually is.
 subject_regex_for_escalation = re.compile('^' + account_and_site_name + ', Work Order \\d+, Escalation: .+ Level$')
 subject_regex_for_work_order_has_a_new_note = re.compile('^' + account_and_site_name + ', Work Order \\d+ has a new note$')
+subject_regex_for_cppm_attachment_sla_approaching = re.compile('^' + account_and_site_name + ' Alert: CPPM Attachment SLA Approaching$')
 
 
 def handle_work_order_email(message, subject, doc):
@@ -386,6 +387,37 @@ def handle_work_order_has_new_note_email(message, subject, doc):
     print 'Updated FaultFixers ticket %s with note' % response_json['ticket']['id']
 
 
+def handle_cppm_attachment_sla_approaching(message, subject, doc):
+    work_order_number = doc('td:contains("Work Order: ")').text().replace('Work Order: ', '').strip()
+    if not work_order_number:
+        raise Exception('No work order number')
+
+    comment = doc('td:contains(" requires compliancy documentation ")').text().strip()
+    if not comment:
+        raise Exception('No comment for work order ' + work_order_number)
+
+    sla = doc('td:contains("Attachment SLA: ")').text().strip()
+    if not sla:
+        raise Exception('No attachment SLA for work order ' + work_order_number)
+
+    contractor_company = doc('td:contains("Contractor: ")').text().replace('Contractor: ', '').strip()
+    if not contractor_company:
+        raise Exception('No contractor for work order ' + work_order_number)
+
+    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
+
+    payload = {
+        'comment': '%s\n\n%s' % (comment, sla),
+        'commentVisibility': 'INTERNAL_TO_TEAM',
+        'updaterDescription': 'Verisae integration',
+    }
+
+    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+
+    print 'Updated FaultFixers ticket %s with CPPM attachment SLA approaching' % response_json['ticket']['id']
+
+
 def handle_message(message, subject):
     if 'parts' in message['payload']:
         full_html = get_body_by_mime_type(message, 'text/html')
@@ -406,6 +438,8 @@ def handle_message(message, subject):
         handle_escalation_email(message, subject, email_doc)
     elif subject_regex_for_work_order_has_a_new_note.match(subject):
         handle_work_order_has_new_note_email(message, subject, email_doc)
+    elif subject_regex_for_cppm_attachment_sla_approaching.match(subject):
+        handle_cppm_attachment_sla_approaching(message, subject, email_doc)
     else:
         raise Exception('Email\'s subject is not in supported format: %s' % subject)
 
