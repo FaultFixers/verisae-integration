@@ -1,9 +1,10 @@
 {
-    "BUILDING": "Other",
     "BUFFET BAR": "Furniture",
+    "BUILDING": "Other",
     "DOORS": "Doors",
     "GAS COMPLIANCE": "Gas",
     "HOT WATER BOILERS": "Boilers",
+    "HVAC": "A/C",
     "PLUMBING": "Plumbing",
     "SELFSERVICE DRINKS MACHINE (SSD)": "Other",
     "WASHROOMS": "Toilets",
