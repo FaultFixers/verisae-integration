@@ -176,6 +176,7 @@ subject_regex_for_quote_authorised = re.compile('^' + account_and_site_name + ',
 subject_regex_for_deescalation = re.compile('^' + account_and_site_name + ', Work Order \\d+, De-escalation: .+ Level$')
 # @todo - see what the escalation email subject actually is.
 subject_regex_for_escalation = re.compile('^' + account_and_site_name + ', Work Order \\d+, Escalation: .+ Level$')
+subject_regex_for_work_order_has_a_new_note = re.compile('^' + account_and_site_name + ', Work Order \\d+ has a new note$')
 
 
 def handle_work_order_email(message, subject, doc):
@@ -348,6 +349,40 @@ def handle_deescalation_email(message, subject, doc):
     print 'Updated FaultFixers ticket %s with de-escalation' % response_json['ticket']['id']
 
 
+def handle_work_order_has_new_note_email(message, subject, doc):
+    work_order_number = subject.split('Work Order ')[1].split(' has a new note')[0].strip()
+    if not work_order_number:
+        raise Exception('No work order number')
+
+    note_type = doc('td.Text2:contains("Note Type:")').text().strip()
+    if not note_type:
+        raise Exception('No note type for work order ' + work_order_number)
+
+    note = doc('td.SmallBold:contains("Note:")').text().strip()
+    if not note:
+        raise Exception('No note for work order ' + work_order_number)
+
+    by = doc('td.Text2:contains("This work order has been updated by ")').text().strip()
+    by = by.replace('This work order has been updated by ', '')
+    by = by.replace(' with the following information:', '')
+    if not by:
+        raise Exception('No user for note for work order ' + work_order_number)
+
+    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    contractor_company = doc('td.Text2').eq(1).text().strip().split('\n')[0].strip()
+    ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
+
+    payload = {
+        'comment': '%s\n\n%s' % (note_type, note),
+        'commentVisibility': 'INTERNAL_TO_TEAM',
+        'updaterDescription': 'Verisae integration on behalf of "%s"' % by,
+    }
+
+    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+
+    print 'Updated FaultFixers ticket %s with note' % response_json['ticket']['id']
+
+
 def handle_message(message, subject):
     if 'parts' in message['payload']:
         full_html = get_body_by_mime_type(message, 'text/html')
@@ -366,6 +401,8 @@ def handle_message(message, subject):
         handle_deescalation_email(message, subject, email_doc)
     elif subject_regex_for_escalation.match(subject):
         handle_escalation_email(message, subject, email_doc)
+    elif subject_regex_for_work_order_has_a_new_note.match(subject):
+        handle_work_order_has_new_note_email(message, subject, email_doc)
     else:
         raise Exception('Email\'s subject is not in supported format: %s' % subject)
 
