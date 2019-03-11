@@ -145,6 +145,9 @@ def create_service():
     return build('gmail', 'v1', credentials=delegated_credentials)
 
 
+service = create_service()
+
+
 def get_header(message, header_name):
     for header in message['payload']['headers']:
         if header['name'] == header_name:
@@ -184,6 +187,10 @@ subject_regex_for_cppm_attachment_sla_approaching = re.compile('^' + account_and
 subject_regex_for_cancellation = re.compile('^Cancel Work Order \\d+, ' + account_and_site_name + '$')
 subject_regex_for_recall = re.compile('^' + account_and_site_name + ', Recalled Work Order \\d+ \\(Instance \\d+\\)$')
 
+subject_regexes_that_will_create_ticket = [
+    subject_regex_for_work_order,
+    subject_regex_for_quote_required,
+]
 
 def handle_work_order_email(message, subject, doc):
     work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
@@ -551,6 +558,13 @@ def handle_message(message, subject):
     else:
         raise Exception('Email\'s subject is not in supported format: %s' % subject)
 
+    print 'Handled message %s, subject: %s' % (message['id'], subject)
+    print
+
+    modify_message(service, 'me', message['id'], {
+        'addLabelIds': [os.getenv('HANDLED_LABEL_ID')],
+        'removeLabelIds': ['UNREAD'],
+    })
 
 def make_api_request(method, endpoint, payload = None):
     print 'Making API request: %s %s' % (method, endpoint)
@@ -571,8 +585,6 @@ def make_api_request(method, endpoint, payload = None):
 
 
 def run():
-    service = create_service()
-
     list_messages = list_messages_matching_query(
         service, 'me', os.getenv('GMAIL_QUERY') + ' AND NOT label:' + os.getenv('HANDLED_LABEL_NAME'))
 
@@ -583,19 +595,28 @@ def run():
 
     print
 
+    delayed = []
+
     for list_message in list_messages:
         message = get_message(service, 'me', list_message['id'])
         subject = get_header(message, 'Subject')
-        print 'Got message %s, subject: %s' % (list_message['id'], subject)
+        print 'Got message %s, subject: %s' % (message['id'], subject)
+
+        is_ticket_creating = False
+        for subject_regex_that_will_create_ticket in subject_regexes_that_will_create_ticket:
+            if subject_regex_that_will_create_ticket.match(subject):
+                is_ticket_creating = True
+
+        if is_ticket_creating:
+            handle_message(message, subject)
+        else:
+            delayed.append((message, subject))
+            print 'Delayed handling of message because it is not ticket-creating'
+
+    for d in delayed:
+        message = d[0]
+        subject = d[1]
         handle_message(message, subject)
-        print 'Handled message %s, subject: %s' % (list_message['id'], subject)
-
-        modify_message(service, 'me', list_message['id'], {
-            'addLabelIds': [os.getenv('HANDLED_LABEL_ID')],
-            'removeLabelIds': ['UNREAD'],
-        })
-
-        print
 
 
 def post_error_to_slack(title, error):
