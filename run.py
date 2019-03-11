@@ -172,7 +172,7 @@ def get_body_by_mime_type(message, mime_type):
 
 
 # Example: 'ACCOUNT_NAME SITE_NUMBER SITE_NAME, Work Order WORK_ORDER_NUMBER'.
-account_and_site_name = '[A-Za-z0-9!\\(\\)\\.: ]+'
+account_and_site_name = '[A-Za-z0-9!\\(\\)\\.:\\- ]+'
 subject_regex_for_work_order = re.compile('^' + account_and_site_name + ', Work Order \\d+$')
 subject_regex_for_quote_required = re.compile('^' + account_and_site_name + ', Quote is required for Work Order #\\d+$')
 subject_regex_for_quote_authorised = re.compile('^' + account_and_site_name + ', The quote has been authorised for the work order #\\d+$')
