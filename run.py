@@ -177,7 +177,6 @@ subject_regex_for_work_order = re.compile('^' + account_and_site_name + ', Work 
 subject_regex_for_quote_required = re.compile('^' + account_and_site_name + ', Quote is required for Work Order #\\d+$')
 subject_regex_for_quote_authorised = re.compile('^' + account_and_site_name + ', The quote has been authorised for the work order #\\d+$')
 subject_regex_for_deescalation = re.compile('^' + account_and_site_name + ', Work Order \\d+, De-escalation: .+ Level$')
-# @todo - see what the escalation email subject actually is.
 subject_regex_for_escalation = re.compile('^' + account_and_site_name + ', Work Order \\d+, Escalation: .+ Level$')
 subject_regex_for_work_order_has_a_new_note = re.compile('^' + account_and_site_name + ', Work Order \\d+ has a new note$')
 subject_regex_for_cppm_attachment_sla_approaching = re.compile('^' + account_and_site_name + ' Alert: CPPM Attachment SLA Approaching$')
@@ -322,7 +321,31 @@ def handle_quote_authorised_email(message, subject, doc):
 
 
 def handle_escalation_email(message, subject, doc):
-    raise Exception('@todo - handle_escalation_email')
+    level = subject.split('Escalation: ')[1].strip()
+
+    work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
+    if not work_order_number:
+        raise Exception('No work order number')
+
+    details = doc('td.Text2:contains("Escalation User:")').text().strip()
+    if not details:
+        raise Exception('No escalation details for work order ' + work_order_number)
+
+    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    contractor_company = doc('td.Text2[colspan="3"]').eq(2).text().strip().split('\n')[0].strip()
+    ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
+
+    comment = 'Escalation via Verisae\n\n%s\n\n%s' % (level, details)
+
+    payload = {
+        'comment': comment,
+        'commentVisibility': 'INTERNAL_TO_TEAM',
+        'updaterDescription': 'Verisae integration',
+    }
+
+    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+
+    print 'Updated FaultFixers ticket %s with de-escalation' % response_json['ticket']['id']
 
 
 def handle_deescalation_email(message, subject, doc):
