@@ -172,7 +172,7 @@ def get_body_by_mime_type(message, mime_type):
 
 
 # Example: 'ACCOUNT_NAME SITE_NUMBER SITE_NAME, Work Order WORK_ORDER_NUMBER'.
-account_and_site_name = '[A-Za-z0-9!\\(\\) ]+'
+account_and_site_name = '[A-Za-z0-9!\\(\\)\\.: ]+'
 subject_regex_for_work_order = re.compile('^' + account_and_site_name + ', Work Order \\d+$')
 subject_regex_for_quote_required = re.compile('^' + account_and_site_name + ', Quote is required for Work Order #\\d+$')
 subject_regex_for_quote_authorised = re.compile('^' + account_and_site_name + ', The quote has been authorised for the work order #\\d+$')
@@ -180,6 +180,7 @@ subject_regex_for_deescalation = re.compile('^' + account_and_site_name + ', Wor
 subject_regex_for_escalation = re.compile('^' + account_and_site_name + ', Work Order \\d+, Escalation: .+ Level$')
 subject_regex_for_work_order_has_a_new_note = re.compile('^' + account_and_site_name + ', Work Order \\d+ has a new note$')
 subject_regex_for_cppm_attachment_sla_approaching = re.compile('^' + account_and_site_name + ' Alert: CPPM Attachment SLA Approaching$')
+subject_regex_for_cancellation = re.compile('^Cancel Work Order \\d+, ' + account_and_site_name + '$')
 
 
 def handle_work_order_email(message, subject, doc):
@@ -441,6 +442,32 @@ def handle_cppm_attachment_sla_approaching(message, subject, doc):
     print 'Updated FaultFixers ticket %s with CPPM attachment SLA approaching' % response_json['ticket']['id']
 
 
+def handle_cancellation_email(message, subject, doc):
+    work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
+    if not work_order_number:
+        raise Exception('No work order number')
+
+    details = doc('td.Text2:contains("Cancel Reason:")').text().strip()
+    if not details:
+        raise Exception('No cancellation details for work order ' + work_order_number)
+
+    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    contractor_company = doc('td.Text2[width="325px"]').eq(1).text().strip().split('\n')[0].strip()
+    ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
+
+    comment = 'Cancelled via Verisae\n\n%s' % details
+
+    payload = {
+        'comment': comment,
+        'commentVisibility': 'INTERNAL_TO_TEAM',
+        'updaterDescription': 'Verisae integration',
+    }
+
+    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+
+    print 'Updated FaultFixers ticket %s with cancellation' % response_json['ticket']['id']
+
+
 def handle_message(message, subject):
     if 'parts' in message['payload']:
         full_html = get_body_by_mime_type(message, 'text/html')
@@ -463,6 +490,8 @@ def handle_message(message, subject):
         handle_work_order_has_new_note_email(message, subject, email_doc)
     elif subject_regex_for_cppm_attachment_sla_approaching.match(subject):
         handle_cppm_attachment_sla_approaching(message, subject, email_doc)
+    elif subject_regex_for_cancellation.match(subject):
+        handle_cancellation_email(message, subject, email_doc)
     else:
         raise Exception('Email\'s subject is not in supported format: %s' % subject)
 
