@@ -201,6 +201,14 @@ def get_body_by_mime_type(message, mime_type):
     return get_part_by_mime_type(message['payload']['parts'], mime_type)
 
 
+def get_notices(doc):
+    notices_cell = doc('td.MsgBlockTitle3:contains("Notices")')
+    if notices_cell:
+        return notices_cell.parent().next('tr').find('td').text().strip()
+    else:
+        return None
+
+
 def handle_work_order_email(message, subject, doc):
     work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
     if not work_order_number:
@@ -233,6 +241,10 @@ def handle_work_order_email(message, subject, doc):
     faultfixers_category_name = get_faultfixers_category_name_by_verisae_name(category)
     faultfixers_mappings_for_client = get_account_mappings_by_name(account_name)
     faultfixers_description = 'New work order via Verisae\n\n%s\n\nEquipment details:\n%s\n\nContact details:\n%s\n\nVerisae access code: %s\n\nVerisae link: %s' % (description, equipment_details, client_contact_details, access_code, start_link)
+
+    notices = get_notices(doc)
+    if notices:
+        faultfixers_description += '\n\nNotices:\n%s' % notices
 
     faultfixers_building = find_faultfixers_building_by_account_and_name(
         faultfixers_mappings_for_client['accountIds'],
