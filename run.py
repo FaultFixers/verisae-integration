@@ -6,11 +6,45 @@ from google.oauth2 import service_account
 from slackclient import SlackClient
 
 
+def create_gmail_service():
+    SCOPES = [
+        'https://www.googleapis.com/auth/gmail.modify',
+        'https://www.googleapis.com/auth/gmail.readonly',
+    ]
+    SERVICE_ACCOUNT_FILE = 'service-account-key.json'
+
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    delegated_credentials = credentials.with_subject(os.getenv('INBOX'))
+
+    return build('gmail', 'v1', credentials=delegated_credentials)
+
+
+service = create_gmail_service()
+
 with open('category-map.json') as f:
     category_map = json.load(f)
 
 with open('account-map.json') as f:
     account_map = json.load(f)
+
+# Example: 'ACCOUNT_NAME SITE_NUMBER SITE_NAME, Work Order WORK_ORDER_NUMBER'.
+account_and_site_name = '[A-Za-z0-9!\\(\\)\\.:\\- ]+'
+subject_regex_for_work_order = re.compile('^' + account_and_site_name + ', Work Order \\d+$')
+subject_regex_for_quote_required = re.compile('^' + account_and_site_name + ', Quote is required for Work Order #\\d+$')
+subject_regex_for_quote_authorised = re.compile('^' + account_and_site_name + ', The quote has been authorised for the work order #\\d+$')
+subject_regex_for_quote_rejected = re.compile('^' + account_and_site_name + ', Quote has been rejected for work order #\\d+$')
+subject_regex_for_deescalation = re.compile('^' + account_and_site_name + ', Work Order \\d+, De-escalation: .+ Level$')
+subject_regex_for_escalation = re.compile('^' + account_and_site_name + ', Work Order \\d+, Escalation: .+ Level$')
+subject_regex_for_work_order_has_a_new_note = re.compile('^' + account_and_site_name + ', Work Order \\d+ has a new note$')
+subject_regex_for_cppm_attachment_sla_approaching = re.compile('^' + account_and_site_name + ' Alert: CPPM Attachment SLA Approaching$')
+subject_regex_for_cancellation = re.compile('^Cancel Work Order \\d+, ' + account_and_site_name + '$')
+subject_regex_for_recall = re.compile('^' + account_and_site_name + ', Recalled Work Order \\d+ \\(Instance \\d+\\)$')
+
+subject_regexes_that_will_create_ticket = [
+    subject_regex_for_work_order,
+    subject_regex_for_quote_required,
+]
 
 
 def find_faultfixers_buildings_by_account_ids(account_ids):
@@ -131,23 +165,6 @@ def modify_message(service, user_id, message_id, modifications):
     return service.users().messages().modify(userId=user_id, id=message_id, body=modifications).execute()
 
 
-def create_service():
-    SCOPES = [
-        'https://www.googleapis.com/auth/gmail.modify',
-        'https://www.googleapis.com/auth/gmail.readonly',
-    ]
-    SERVICE_ACCOUNT_FILE = 'service-account-key.json'
-
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-    delegated_credentials = credentials.with_subject(os.getenv('INBOX'))
-
-    return build('gmail', 'v1', credentials=delegated_credentials)
-
-
-service = create_service()
-
-
 def get_header(message, header_name):
     for header in message['payload']['headers']:
         if header['name'] == header_name:
@@ -173,24 +190,6 @@ def get_part_by_mime_type(parts, mime_type):
 def get_body_by_mime_type(message, mime_type):
     return get_part_by_mime_type(message['payload']['parts'], mime_type)
 
-
-# Example: 'ACCOUNT_NAME SITE_NUMBER SITE_NAME, Work Order WORK_ORDER_NUMBER'.
-account_and_site_name = '[A-Za-z0-9!\\(\\)\\.:\\- ]+'
-subject_regex_for_work_order = re.compile('^' + account_and_site_name + ', Work Order \\d+$')
-subject_regex_for_quote_required = re.compile('^' + account_and_site_name + ', Quote is required for Work Order #\\d+$')
-subject_regex_for_quote_authorised = re.compile('^' + account_and_site_name + ', The quote has been authorised for the work order #\\d+$')
-subject_regex_for_quote_rejected = re.compile('^' + account_and_site_name + ', Quote has been rejected for work order #\\d+$')
-subject_regex_for_deescalation = re.compile('^' + account_and_site_name + ', Work Order \\d+, De-escalation: .+ Level$')
-subject_regex_for_escalation = re.compile('^' + account_and_site_name + ', Work Order \\d+, Escalation: .+ Level$')
-subject_regex_for_work_order_has_a_new_note = re.compile('^' + account_and_site_name + ', Work Order \\d+ has a new note$')
-subject_regex_for_cppm_attachment_sla_approaching = re.compile('^' + account_and_site_name + ' Alert: CPPM Attachment SLA Approaching$')
-subject_regex_for_cancellation = re.compile('^Cancel Work Order \\d+, ' + account_and_site_name + '$')
-subject_regex_for_recall = re.compile('^' + account_and_site_name + ', Recalled Work Order \\d+ \\(Instance \\d+\\)$')
-
-subject_regexes_that_will_create_ticket = [
-    subject_regex_for_work_order,
-    subject_regex_for_quote_required,
-]
 
 def handle_work_order_email(message, subject, doc):
     work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
