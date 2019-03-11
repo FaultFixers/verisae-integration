@@ -182,6 +182,7 @@ subject_regex_for_escalation = re.compile('^' + account_and_site_name + ', Work 
 subject_regex_for_work_order_has_a_new_note = re.compile('^' + account_and_site_name + ', Work Order \\d+ has a new note$')
 subject_regex_for_cppm_attachment_sla_approaching = re.compile('^' + account_and_site_name + ' Alert: CPPM Attachment SLA Approaching$')
 subject_regex_for_cancellation = re.compile('^Cancel Work Order \\d+, ' + account_and_site_name + '$')
+subject_regex_for_recall = re.compile('^' + account_and_site_name + ', Recalled Work Order \\d+ \\(Instance \\d+\\)$')
 
 
 def handle_work_order_email(message, subject, doc):
@@ -489,6 +490,36 @@ def handle_cancellation_email(message, subject, doc):
     print 'Updated FaultFixers ticket %s with cancellation' % response_json['ticket']['id']
 
 
+def handle_recall_email(message, subject, doc):
+    work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
+    if not work_order_number:
+        raise Exception('No work order number')
+
+    details = doc('td.Text2:contains("Recall Reason:")').text().strip()
+    if not details:
+        raise Exception('No recall details for work order ' + work_order_number)
+
+    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    contractor_company = doc('td.Text2[width="325px"]').eq(1).text().strip().split('\n')[0].strip()
+    ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
+
+    details = details.split('\n')
+    details = filter(lambda line: line.startswith('Recall'), details)
+    details = '\n\n'.join(details)
+
+    comment = 'Recalled via Verisae\n\n%s' % details
+
+    payload = {
+        'comment': comment,
+        'commentVisibility': 'INTERNAL_TO_TEAM',
+        'updaterDescription': 'Verisae integration',
+    }
+
+    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+
+    print 'Updated FaultFixers ticket %s with recall' % response_json['ticket']['id']
+
+
 def handle_message(message, subject):
     if 'parts' in message['payload']:
         full_html = get_body_by_mime_type(message, 'text/html')
@@ -515,6 +546,8 @@ def handle_message(message, subject):
         handle_cppm_attachment_sla_approaching(message, subject, email_doc)
     elif subject_regex_for_cancellation.match(subject):
         handle_cancellation_email(message, subject, email_doc)
+    elif subject_regex_for_recall.match(subject):
+        handle_recall_email(message, subject, email_doc)
     else:
         raise Exception('Email\'s subject is not in supported format: %s' % subject)
 
