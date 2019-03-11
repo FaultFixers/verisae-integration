@@ -1,3 +1,5 @@
+# coding: utf-8
+
 import sys, base64, os, settings, requests, talon, re, json
 from pyquery import PyQuery as pq
 from apiclient import errors
@@ -106,6 +108,14 @@ def ensure_building_is_owned_by_account_name(building_id, account_name):
     raise Exception('Building %s is not owned by %s' % (building_id, account_name))
 
 
+def apply_description_redactions(description):
+    description = description.strip()
+    # Remove costs from descriptions to avoid wage politics.
+    description = re.sub(u'Not To Exceed \\(NTE\\): \u00a3[\\d+\\.]+\n?', '', description)
+    description = description.strip()
+    return description
+
+
 def list_messages_matching_query(service, user_id, query=''):
     """List all Messages of the user's mailbox matching the query.
 
@@ -205,13 +215,15 @@ def handle_work_order_email(message, subject, doc):
     service_request_location = doc('td.Text2[width="325px"]').eq(3)
     account_and_building_name = service_request_location.find('.BlockSubtitle').text().strip()
     account_name = account_and_building_name.split(',')[0].strip()
-    site_number = account_and_building_name.split(',')[1].split('\n')[0].strip()
-    description = doc('td.Text2 b:contains("Work Order Type:")').parent().text().strip()
 
-    if not description:
-        raise Exception('No description for work order ' + work_order_number)
+    site_number = account_and_building_name.split(',')[1].split('\n')[0].strip()
     if not site_number:
         raise Exception('No site_number for work order ' + work_order_number)
+
+    description = doc('td.Text2 b:contains("Work Order Type:")').parent().text().strip()
+    if not description:
+        raise Exception('No description for work order ' + work_order_number)
+    description = apply_description_redactions(description)
 
     if '\nLocation:' in equipment_details:
         location_description = equipment_details.split('Location:')[1].strip().split('\n')[0]
@@ -256,13 +268,15 @@ def handle_quote_required_email(message, subject, doc):
     service_request_location = doc('td.Text2[width="325"]').eq(3)
     account_and_building_name = service_request_location.find('.BlockSubtitle').text().strip()
     account_name = account_and_building_name.split(',')[0].strip()
-    site_number = account_and_building_name.split(', ')[1].split(' ')[0].strip()
-    description = doc('td.Text2 b:contains("Work Order Type:")').parent().text().strip()
 
-    if not description:
-        raise Exception('No description for work order ' + work_order_number)
+    site_number = account_and_building_name.split(', ')[1].split(' ')[0].strip()
     if not site_number:
         raise Exception('No site_number for work order ' + work_order_number)
+
+    description = doc('td.Text2 b:contains("Work Order Type:")').parent().text().strip()
+    if not description:
+        raise Exception('No description for work order ' + work_order_number)
+    description = apply_description_redactions(description)
 
     if '\nLocation:' in equipment_details:
         location_description = equipment_details.split('Location:')[1].strip().split('\n')[0]
@@ -316,7 +330,9 @@ def handle_quote_authorised_email(message, subject, doc):
     contractor_company = doc('td.Text2[width="325"]').eq(1).find('.BlockSubtitle').text().strip()
     ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
-    comment = 'Quote authorised via Verisae\n\nQuote details:\n%s\n\nVerisae access code: %s\n\nVerisae link: %s' % (quote_details, access_code, start_link)
+    # `quote_details` is deliberately not included in the ticket comment to avoid wage politics.
+
+    comment = 'Quote authorised via Verisae\n\nVerisae access code: %s\n\nVerisae link: %s' % (access_code, start_link)
 
     payload = {
         'comment': comment,
@@ -611,6 +627,7 @@ def run():
         else:
             delayed.append((message, subject))
             print 'Delayed handling of message because it is not ticket-creating'
+            print
 
     for d in delayed:
         message = d[0]
