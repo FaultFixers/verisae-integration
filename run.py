@@ -598,7 +598,7 @@ def make_api_request(method, endpoint, payload = None):
 
     headers = {
         'authorization': os.getenv('API_AUTHORIZATION_HEADER'),
-        'accept': 'application/vnd.faultfixers.v12+json',
+        'accept': 'application/vnd.faultfixers.v13+json',
         'content-type': 'application/json',
     }
     response = getattr(requests, method.lower())(
