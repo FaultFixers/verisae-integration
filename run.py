@@ -675,7 +675,10 @@ except errors.HttpError, error:
 except requests.exceptions.HTTPError, error:
     print 'An error occurred: %s' % error
     print 'response: %s' % error.response
-    print 'json: %s' % error.response.json()
+    try:
+        print 'json: %s' % error.response.json()
+    except:
+        print 'no json in response'
     post_error_to_slack('Error in Verisae integration', error)
 except:
     print 'Unexpected error:', sys.exc_info()[1]
