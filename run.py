@@ -652,7 +652,7 @@ def run():
         handle_message(message, subject)
 
 
-def post_error_to_slack(title, error):
+def post_error_to_slack(error):
     if os.getenv('SLACK_ENABLED') != 'true':
         print 'Posting to Slack is not enabled'
         return
@@ -664,7 +664,7 @@ def post_error_to_slack(title, error):
     sc.api_call(
         'chat.postMessage',
         channel=channel,
-        text='%s: %s' % (title, error)
+        text='Error in Verisae integration: %s' % error
     )
 
 try:
@@ -676,7 +676,7 @@ except errors.HttpError, error:
     print 'message: %s' % error.message
     print 'resp: %s' % error.resp
     print 'uri: %s' % error.uri
-    post_error_to_slack('Error in Verisae integration', error)
+    post_error_to_slack(error)
 except requests.exceptions.HTTPError, error:
     print 'An error occurred: %s' % error
     print 'response: %s' % error.response
@@ -684,8 +684,8 @@ except requests.exceptions.HTTPError, error:
         print 'json: %s' % error.response.json()
     except:
         print 'no json in response'
-    post_error_to_slack('Error in Verisae integration', error)
+    post_error_to_slack(error)
 except:
     print 'Unexpected error:', sys.exc_info()[1]
-    post_error_to_slack('Error in Verisae integration', sys.exc_info()[1])
+    post_error_to_slack(sys.exc_info()[1])
     raise
