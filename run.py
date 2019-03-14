@@ -42,6 +42,7 @@ subject_regex_for_work_order_has_a_new_note = re.compile('^' + account_and_site_
 subject_regex_for_cppm_attachment_sla_approaching = re.compile('^' + account_and_site_name + ' Alert: CPPM Attachment SLA Approaching$')
 subject_regex_for_cancellation = re.compile('^Cancel Work Order \\d+, ' + account_and_site_name + '$')
 subject_regex_for_recall = re.compile('^' + account_and_site_name + ', Recalled Work Order \\d+ \\(Instance \\d+\\)$')
+subject_regex_for_requoting = re.compile('^' + account_and_site_name + ', Work Order # \\d+ has been Re-Quoted. Please Resubmit your Quote$')
 
 subject_regexes_that_will_create_ticket = [
     subject_regex_for_work_order,
@@ -559,6 +560,37 @@ def handle_recall_email(message, subject, doc):
     print 'Updated FaultFixers ticket %s with recall' % response_json['ticket']['id']
 
 
+def handle_requoting_email(message, subject, doc):
+    work_order_number = doc('.WOIDblockTitle:contains("Work Order")').parent().parent().find('td.WOID').text().strip()
+    if not work_order_number:
+        raise Exception('No work order number')
+
+    details = doc('td.Text2:contains("Work Order Type:")').text().strip()
+    if not details:
+        raise Exception('No details for work order ' + work_order_number)
+
+    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    contractor_company = doc('td.Text2[width="325"]').eq(1).text().strip().split('\n')[0].strip()
+    ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
+
+    ff_comment = 'Re-quoting requested via Verisae. Please re-submit a quote.'
+
+    details = details.split('\n')
+    email_comments = filter(lambda line: line.startswith('Comments: '), details)
+    if len(email_comments) > 0:
+        ff_comment += '\n\n' + '\n'.join(email_comments)
+
+    payload = {
+        'comment': ff_comment,
+        'commentVisibility': 'INTERNAL_TO_TEAM',
+        'updaterDescription': 'Verisae integration',
+    }
+
+    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+
+    print 'Updated FaultFixers ticket %s with re-quote' % response_json['ticket']['id']
+
+
 def handle_message(message, subject):
     if 'parts' in message['payload']:
         full_html = get_body_by_mime_type(message, 'text/html')
@@ -587,6 +619,8 @@ def handle_message(message, subject):
         handle_cancellation_email(message, subject, email_doc)
     elif subject_regex_for_recall.match(subject):
         handle_recall_email(message, subject, email_doc)
+    elif subject_regex_for_requoting.match(subject):
+        handle_requoting_email(message, subject, email_doc)
     else:
         raise Exception('Email\'s subject is not in supported format: %s' % subject)
 
