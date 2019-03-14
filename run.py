@@ -142,7 +142,12 @@ def list_messages_matching_query(service, user_id, query=''):
         page_token = response['nextPageToken']
         response = service.users().messages().list(
             userId=user_id, q=query, pageToken=page_token).execute()
-        messages.extend(response['messages'])
+
+        # 'messages' will not be present in the next page if the total available messages is the same size as the first
+        # page. In other words, if the Gmail page size is 100 and there are exactly 100 available messages, the first
+        # response will return 100 and a 'nextPageToken', and the second page will return nothing.
+        if 'messages' in response:
+            messages.extend(response['messages'])
 
     # Sort by oldest first. Gmail always returns with the newest first -- this is not configurable.
     messages.reverse()
