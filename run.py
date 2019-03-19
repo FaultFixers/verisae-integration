@@ -279,52 +279,74 @@ def handle_quote_required_email(message, subject, doc):
     if not work_order_number:
         raise Exception('No work order number')
 
-    client_contact_details = doc('td.Text2[width="325"]').eq(0).find('p').text().strip()
+    try:
+        existing_faultfixers_ticket = make_api_request('GET', '/tickets/' + work_order_number)
+    except requests.exceptions.HTTPError, error:
+        if error.response.status_code == 404:
+            existing_faultfixers_ticket = None
+        else:
+            raise error
+
     contractor_company = doc('td.Text2[width="325"]').eq(1).find('.BlockSubtitle').text().strip()
-    equipment_details = doc('td.Text2[width="325"]').eq(2).text().strip()
-    category = equipment_details.split(',')[0]
-    service_request_location = doc('td.Text2[width="325"]').eq(3)
-    account_and_building_name = service_request_location.find('.BlockSubtitle').text().strip()
-    account_name = account_and_building_name.split(',')[0].strip()
 
-    site_number = account_and_building_name.split(', ')[1].split(' ')[0].strip()
-    if not site_number:
-        raise Exception('No site_number for work order ' + work_order_number)
+    if existing_faultfixers_ticket:
+        ensure_building_is_owned_by_account_name(existing_faultfixers_ticket['building']['id'], contractor_company)
 
-    description = doc('td.Text2 b:contains("Work Order Type:")').parent().text().strip()
-    if not description:
-        raise Exception('No description for work order ' + work_order_number)
-    description = apply_description_redactions(description)
+        payload = {
+            'comment': 'Quote required via Verisae',
+            'commentVisibility': 'INTERNAL_TO_TEAM',
+            'updaterDescription': 'Verisae integration',
+        }
 
-    if '\nLocation:' in equipment_details:
-        location_description = equipment_details.split('Location:')[1].strip().split('\n')[0]
+        response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+
+        print 'Updated FaultFixers ticket %s with quote required' % response_json['ticket']['id']
     else:
-        location_description = None
+        client_contact_details = doc('td.Text2[width="325"]').eq(0).find('p').text().strip()
+        equipment_details = doc('td.Text2[width="325"]').eq(2).text().strip()
+        category = equipment_details.split(',')[0]
+        service_request_location = doc('td.Text2[width="325"]').eq(3)
+        account_and_building_name = service_request_location.find('.BlockSubtitle').text().strip()
+        account_name = account_and_building_name.split(',')[0].strip()
 
-    faultfixers_category_name = get_faultfixers_category_name_by_verisae_name(category)
-    faultfixers_mappings_for_client = get_account_mappings_by_name(account_name)
-    faultfixers_description = 'Quote required via Verisae\n\n%s\n\nEquipment details:\n%s\n\nContact details:\n%s' % (description, equipment_details, client_contact_details)
+        site_number = account_and_building_name.split(', ')[1].split(' ')[0].strip()
+        if not site_number:
+            raise Exception('No site_number for work order ' + work_order_number)
 
-    faultfixers_building = find_faultfixers_building_by_account_and_name(
-        faultfixers_mappings_for_client['accountIds'],
-        faultfixers_mappings_for_client['buildingNameFormat'],
-        site_number
-    )
+        description = doc('td.Text2 b:contains("Work Order Type:")').parent().text().strip()
+        if not description:
+            raise Exception('No description for work order ' + work_order_number)
+        description = apply_description_redactions(description)
 
-    payload = {
-        'building': faultfixers_building['id'],
-        'category': faultfixers_category_name,
-        'description': faultfixers_description,
-        'locationDescription': location_description,
-        'customFriendlyId': work_order_number,
-        'reporterDescription': 'Verisae integration',
-        'type': 'REACTIVE',
-        'privacy': 'PRIVATE',
-    }
+        if '\nLocation:' in equipment_details:
+            location_description = equipment_details.split('Location:')[1].strip().split('\n')[0]
+        else:
+            location_description = None
 
-    response_json = make_api_request('POST', '/tickets', payload)
+        faultfixers_category_name = get_faultfixers_category_name_by_verisae_name(category)
+        faultfixers_mappings_for_client = get_account_mappings_by_name(account_name)
+        faultfixers_description = 'Quote required via Verisae\n\n%s\n\nEquipment details:\n%s\n\nContact details:\n%s' % (description, equipment_details, client_contact_details)
 
-    print 'Created FaultFixers ticket %s' % response_json['ticket']['id']
+        faultfixers_building = find_faultfixers_building_by_account_and_name(
+            faultfixers_mappings_for_client['accountIds'],
+            faultfixers_mappings_for_client['buildingNameFormat'],
+            site_number
+        )
+
+        payload = {
+            'building': faultfixers_building['id'],
+            'category': faultfixers_category_name,
+            'description': faultfixers_description,
+            'locationDescription': location_description,
+            'customFriendlyId': work_order_number,
+            'reporterDescription': 'Verisae integration',
+            'type': 'REACTIVE',
+            'privacy': 'PRIVATE',
+        }
+
+        response_json = make_api_request('POST', '/tickets', payload)
+
+        print 'Created FaultFixers ticket %s' % response_json['ticket']['id']
 
 
 def handle_quote_authorised_email(message, subject, doc):
