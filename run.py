@@ -252,26 +252,46 @@ def handle_work_order_email(message, subject, doc):
     if notices:
         faultfixers_description += '\n\nNotices:\n%s' % notices
 
-    faultfixers_building = find_faultfixers_building_by_account_and_name(
-        faultfixers_mappings_for_client['accountIds'],
-        faultfixers_mappings_for_client['buildingNameFormat'],
-        site_number
-    )
+    try:
+        existing_faultfixers_ticket = make_api_request('GET', '/tickets/' + work_order_number)
+    except requests.exceptions.HTTPError, error:
+        if error.response.status_code == 404:
+            existing_faultfixers_ticket = None
+        else:
+            raise error
 
-    payload = {
-        'category': faultfixers_category_name,
-        'description': faultfixers_description,
-        'locationDescription': location_description,
-        'building': faultfixers_building['id'],
-        'customFriendlyId': work_order_number,
-        'reporterDescription': 'Verisae integration',
-        'type': 'REACTIVE',
-        'privacy': 'PRIVATE',
-    }
+    if existing_faultfixers_ticket:
+        ensure_building_is_owned_by_account_name(existing_faultfixers_ticket['building']['id'], contractor_company)
 
-    response_json = make_api_request('POST', '/tickets', payload)
+        payload = {
+            'description': faultfixers_description,
+            'updaterDescription': 'Verisae integration',
+        }
 
-    print 'Created FaultFixers ticket %s' % response_json['ticket']['id']
+        response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+
+        print 'Updated description for FaultFixers ticket %s' % response_json['ticket']['id']
+    else:
+        faultfixers_building = find_faultfixers_building_by_account_and_name(
+            faultfixers_mappings_for_client['accountIds'],
+            faultfixers_mappings_for_client['buildingNameFormat'],
+            site_number
+        )
+
+        payload = {
+            'category': faultfixers_category_name,
+            'description': faultfixers_description,
+            'locationDescription': location_description,
+            'building': faultfixers_building['id'],
+            'customFriendlyId': work_order_number,
+            'reporterDescription': 'Verisae integration',
+            'type': 'REACTIVE',
+            'privacy': 'PRIVATE',
+        }
+
+        response_json = make_api_request('POST', '/tickets', payload)
+
+        print 'Created FaultFixers ticket %s' % response_json['ticket']['id']
 
 
 def handle_quote_required_email(message, subject, doc):
