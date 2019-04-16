@@ -79,6 +79,14 @@ def find_faultfixers_ticket_by_id(id):
     return ticket
 
 
+def create_faultfixers_ticket(payload):
+    return make_api_request('POST', '/tickets', payload)
+
+
+def update_faultfixers_ticket(id, payload):
+    return make_api_request('PUT', '/tickets/' + id, payload)
+
+
 def get_faultfixers_category_name_by_verisae_name(verisae_name):
     if verisae_name not in category_map:
         raise Exception('Category name is not in the map: ' + verisae_name)
@@ -253,7 +261,7 @@ def handle_work_order_email(message, subject, doc):
         faultfixers_description += '\n\nNotices:\n%s' % notices
 
     try:
-        existing_faultfixers_ticket = make_api_request('GET', '/tickets/' + work_order_number)
+        existing_faultfixers_ticket = find_faultfixers_ticket_by_id(work_order_number)
     except requests.exceptions.HTTPError, error:
         if error.response.status_code == 404:
             existing_faultfixers_ticket = None
@@ -268,7 +276,7 @@ def handle_work_order_email(message, subject, doc):
             'updaterDescription': 'Verisae integration',
         }
 
-        response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+        response_json = update_faultfixers_ticket(work_order_number, payload)
 
         print 'Updated description for FaultFixers ticket %s' % response_json['ticket']['id']
     else:
@@ -289,7 +297,7 @@ def handle_work_order_email(message, subject, doc):
             'privacy': 'PRIVATE',
         }
 
-        response_json = make_api_request('POST', '/tickets', payload)
+        response_json = create_faultfixers_ticket(payload)
 
         print 'Created FaultFixers ticket %s' % response_json['ticket']['id']
 
@@ -300,7 +308,7 @@ def handle_quote_required_email(message, subject, doc):
         raise Exception('No work order number')
 
     try:
-        existing_faultfixers_ticket = make_api_request('GET', '/tickets/' + work_order_number)
+        existing_faultfixers_ticket = find_faultfixers_ticket_by_id(work_order_number)
     except requests.exceptions.HTTPError, error:
         if error.response.status_code == 404:
             existing_faultfixers_ticket = None
@@ -318,7 +326,7 @@ def handle_quote_required_email(message, subject, doc):
             'updaterDescription': 'Verisae integration',
         }
 
-        response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+        response_json = update_faultfixers_ticket(work_order_number, payload)
 
         print 'Updated FaultFixers ticket %s with quote required' % response_json['ticket']['id']
     else:
@@ -364,7 +372,7 @@ def handle_quote_required_email(message, subject, doc):
             'privacy': 'PRIVATE',
         }
 
-        response_json = make_api_request('POST', '/tickets', payload)
+        response_json = create_faultfixers_ticket(payload)
 
         print 'Created FaultFixers ticket %s' % response_json['ticket']['id']
 
@@ -400,7 +408,7 @@ def handle_quote_authorised_email(message, subject, doc):
         'updaterDescription': 'Verisae integration',
     }
 
-    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+    response_json = update_faultfixers_ticket(work_order_number, payload)
 
     print 'Updated FaultFixers ticket %s with quote approval' % response_json['ticket']['id']
 
@@ -420,7 +428,7 @@ def handle_quote_rejected_email(message, subject, doc):
         'updaterDescription': 'Verisae integration',
     }
 
-    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+    response_json = update_faultfixers_ticket(work_order_number, payload)
 
     print 'Updated FaultFixers ticket %s with quote approval' % response_json['ticket']['id']
 
@@ -448,7 +456,7 @@ def handle_escalation_email(message, subject, doc):
         'updaterDescription': 'Verisae integration',
     }
 
-    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+    response_json = update_faultfixers_ticket(work_order_number, payload)
 
     print 'Updated FaultFixers ticket %s with de-escalation' % response_json['ticket']['id']
 
@@ -476,7 +484,7 @@ def handle_deescalation_email(message, subject, doc):
         'updaterDescription': 'Verisae integration',
     }
 
-    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+    response_json = update_faultfixers_ticket(work_order_number, payload)
 
     print 'Updated FaultFixers ticket %s with de-escalation' % response_json['ticket']['id']
 
@@ -510,7 +518,7 @@ def handle_work_order_has_new_note_email(message, subject, doc):
         'updaterDescription': 'Verisae integration on behalf of "%s"' % by,
     }
 
-    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+    response_json = update_faultfixers_ticket(work_order_number, payload)
 
     print 'Updated FaultFixers ticket %s with note' % response_json['ticket']['id']
 
@@ -541,7 +549,7 @@ def handle_cppm_attachment_sla_approaching(message, subject, doc):
         'updaterDescription': 'Verisae integration',
     }
 
-    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+    response_json = update_faultfixers_ticket(work_order_number, payload)
 
     print 'Updated FaultFixers ticket %s with CPPM attachment SLA approaching' % response_json['ticket']['id']
 
@@ -567,7 +575,7 @@ def handle_cancellation_email(message, subject, doc):
         'updaterDescription': 'Verisae integration',
     }
 
-    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+    response_json = update_faultfixers_ticket(work_order_number, payload)
 
     print 'Updated FaultFixers ticket %s with cancellation' % response_json['ticket']['id']
 
@@ -597,7 +605,7 @@ def handle_recall_email(message, subject, doc):
         'updaterDescription': 'Verisae integration',
     }
 
-    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+    response_json = update_faultfixers_ticket(work_order_number, payload)
 
     print 'Updated FaultFixers ticket %s with recall' % response_json['ticket']['id']
 
@@ -628,7 +636,7 @@ def handle_requoting_email(message, subject, doc):
         'updaterDescription': 'Verisae integration',
     }
 
-    response_json = make_api_request('PUT', '/tickets/' + work_order_number, payload)
+    response_json = update_faultfixers_ticket(work_order_number, payload)
 
     print 'Updated FaultFixers ticket %s with re-quote' % response_json['ticket']['id']
 
