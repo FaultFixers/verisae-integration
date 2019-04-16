@@ -50,6 +50,10 @@ subject_regexes_that_will_create_ticket = [
 ]
 
 
+class InvalidFaultFixersTicketIdException(Exception):
+    pass
+
+
 def find_faultfixers_buildings_by_account_ids(account_ids):
     response_json = make_api_request('GET', '/buildings?account=' + ','.join(account_ids))
     return map(lambda result: result['building'], response_json['results'])
@@ -70,10 +74,20 @@ def find_faultfixers_building_by_account_and_name(account_ids, expected_building
 
 
 def find_faultfixers_ticket_by_id(id):
+    """
+    If no ticket exists with the given ID, raises a `InvalidFaultFixersTicketIdException`.
+    """
     if not id:
         raise Exception('No ticket ID given')
 
-    response_json = make_api_request('GET', '/tickets/' + id)
+    try:
+        response_json = make_api_request('GET', '/tickets/' + id)
+    except requests.exceptions.HTTPError, error:
+        if error.response.status_code == 404:
+            raise InvalidFaultFixersTicketIdException('No FaultFixers ticket with ID ' + id)
+        else:
+            raise error
+
     ticket = response_json['ticket']
     ticket['building'] = response_json['building']
     return ticket
@@ -262,11 +276,8 @@ def handle_work_order_email(message, subject, doc):
 
     try:
         existing_faultfixers_ticket = find_faultfixers_ticket_by_id(work_order_number)
-    except requests.exceptions.HTTPError, error:
-        if error.response.status_code == 404:
-            existing_faultfixers_ticket = None
-        else:
-            raise error
+    except InvalidFaultFixersTicketIdException:
+        existing_faultfixers_ticket = None
 
     if existing_faultfixers_ticket:
         ensure_building_is_owned_by_account_name(existing_faultfixers_ticket['building']['id'], contractor_company)
@@ -309,11 +320,8 @@ def handle_quote_required_email(message, subject, doc):
 
     try:
         existing_faultfixers_ticket = find_faultfixers_ticket_by_id(work_order_number)
-    except requests.exceptions.HTTPError, error:
-        if error.response.status_code == 404:
-            existing_faultfixers_ticket = None
-        else:
-            raise error
+    except InvalidFaultFixersTicketIdException:
+        existing_faultfixers_ticket = None
 
     contractor_company = doc('td.Text2[width="325"]').eq(1).find('.BlockSubtitle').text().strip()
 
@@ -723,6 +731,10 @@ def run():
             if subject_regex_that_will_create_ticket.match(subject):
                 is_ticket_creating = True
 
+        # Ticket-creating messages (i.e. new work orders or quote-required messages) should be handled first,
+        # and updates delayed until after them. This is because Verisae sometimes sends update messages and
+        # ticket-creating messages for the same new ticket at the exact same time, or even sometimes the update message comes
+        # before the ticket-creating message.
         if is_ticket_creating:
             handle_message(message, subject)
         else:
