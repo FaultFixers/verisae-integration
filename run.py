@@ -548,7 +548,12 @@ def handle_cppm_attachment_sla_approaching(message, subject, doc):
     if not contractor_company:
         raise Exception('No contractor for work order ' + work_order_number)
 
-    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    try:
+        ticket = find_faultfixers_ticket_by_id(work_order_number)
+    except InvalidFaultFixersTicketIdException:
+        print 'No FaultFixers ticket with ID %s - ignoring CPPM attachment SLA approaching' % work_order_number
+        return
+
     ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
     payload = {
