@@ -402,7 +402,12 @@ def handle_quote_authorised_email(message, subject, doc):
     if not quote_details:
         raise Exception('No quote details for work order ' + work_order_number)
 
-    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    try:
+        ticket = find_faultfixers_ticket_by_id(work_order_number)
+    except InvalidFaultFixersTicketIdException:
+        print 'No FaultFixers ticket with ID %s - ignoring quote approval' % work_order_number
+        return
+
     contractor_company = doc('td.Text2[width="325"]').eq(1).find('.BlockSubtitle').text().strip()
     ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
@@ -426,7 +431,12 @@ def handle_quote_rejected_email(message, subject, doc):
     if not work_order_number:
         raise Exception('No work order number')
 
-    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    try:
+        ticket = find_faultfixers_ticket_by_id(work_order_number)
+    except InvalidFaultFixersTicketIdException:
+        print 'No FaultFixers ticket with ID %s - ignoring quote rejection' % work_order_number
+        return
+
     contractor_company = doc('td.Text2[width="325"]').eq(1).find('.BlockSubtitle').text().strip()
     ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
@@ -438,7 +448,7 @@ def handle_quote_rejected_email(message, subject, doc):
 
     response_json = update_faultfixers_ticket(work_order_number, payload)
 
-    print 'Updated FaultFixers ticket %s with quote approval' % response_json['ticket']['id']
+    print 'Updated FaultFixers ticket %s with quote rejection' % response_json['ticket']['id']
 
 
 def handle_escalation_email(message, subject, doc):
@@ -452,7 +462,12 @@ def handle_escalation_email(message, subject, doc):
     if not details:
         raise Exception('No escalation details for work order ' + work_order_number)
 
-    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    try:
+        ticket = find_faultfixers_ticket_by_id(work_order_number)
+    except InvalidFaultFixersTicketIdException:
+        print 'No FaultFixers ticket with ID %s - ignoring escalation' % work_order_number
+        return
+
     contractor_company = doc('td.Text2[colspan="3"]').eq(2).text().strip().split('\n')[0].strip()
     ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
@@ -466,7 +481,7 @@ def handle_escalation_email(message, subject, doc):
 
     response_json = update_faultfixers_ticket(work_order_number, payload)
 
-    print 'Updated FaultFixers ticket %s with de-escalation' % response_json['ticket']['id']
+    print 'Updated FaultFixers ticket %s with escalation' % response_json['ticket']['id']
 
 
 def handle_deescalation_email(message, subject, doc):
@@ -480,7 +495,12 @@ def handle_deescalation_email(message, subject, doc):
     if not details:
         raise Exception('No de-escalation details for work order ' + work_order_number)
 
-    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    try:
+        ticket = find_faultfixers_ticket_by_id(work_order_number)
+    except InvalidFaultFixersTicketIdException:
+        print 'No FaultFixers ticket with ID %s - ignoring de-escalation' % work_order_number
+        return
+
     contractor_company = doc('td.Text2[colspan="3"]').eq(2).text().strip().split('\n')[0].strip()
     ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
@@ -516,7 +536,12 @@ def handle_work_order_has_new_note_email(message, subject, doc):
     if not by:
         raise Exception('No user for note for work order ' + work_order_number)
 
-    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    try:
+        ticket = find_faultfixers_ticket_by_id(work_order_number)
+    except InvalidFaultFixersTicketIdException:
+        print 'No FaultFixers ticket with ID %s - ignoring new note' % work_order_number
+        return
+
     contractor_company = doc('td.Text2').eq(1).text().strip().split('\n')[0].strip()
     ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
@@ -528,7 +553,7 @@ def handle_work_order_has_new_note_email(message, subject, doc):
 
     response_json = update_faultfixers_ticket(work_order_number, payload)
 
-    print 'Updated FaultFixers ticket %s with note' % response_json['ticket']['id']
+    print 'Updated FaultFixers ticket %s with new note' % response_json['ticket']['id']
 
 
 def handle_cppm_attachment_sla_approaching(message, subject, doc):
@@ -576,7 +601,12 @@ def handle_cancellation_email(message, subject, doc):
     if not details:
         raise Exception('No cancellation details for work order ' + work_order_number)
 
-    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    try:
+        ticket = find_faultfixers_ticket_by_id(work_order_number)
+    except InvalidFaultFixersTicketIdException:
+        print 'No FaultFixers ticket with ID %s - ignoring cancellation' % work_order_number
+        return
+
     contractor_company = doc('td.Text2[width="325px"]').eq(1).text().strip().split('\n')[0].strip()
     ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
@@ -602,7 +632,12 @@ def handle_recall_email(message, subject, doc):
     if not details:
         raise Exception('No recall details for work order ' + work_order_number)
 
-    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    try:
+        ticket = find_faultfixers_ticket_by_id(work_order_number)
+    except InvalidFaultFixersTicketIdException:
+        print 'No FaultFixers ticket with ID %s - ignoring recall' % work_order_number
+        return
+
     contractor_company = doc('td.Text2[width="325px"]').eq(1).text().strip().split('\n')[0].strip()
     ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
@@ -632,7 +667,12 @@ def handle_requoting_email(message, subject, doc):
     if not details:
         raise Exception('No details for work order ' + work_order_number)
 
-    ticket = find_faultfixers_ticket_by_id(work_order_number)
+    try:
+        ticket = find_faultfixers_ticket_by_id(work_order_number)
+    except InvalidFaultFixersTicketIdException:
+        print 'No FaultFixers ticket with ID %s - ignoring re-quote' % work_order_number
+        return
+
     contractor_company = doc('td.Text2[width="325"]').eq(1).text().strip().split('\n')[0].strip()
     ensure_building_is_owned_by_account_name(ticket['building']['id'], contractor_company)
 
