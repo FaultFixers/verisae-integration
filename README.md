@@ -7,7 +7,14 @@ The email types supported are:
 * New work order
 * Quote requested
 * Quote authorised
-* Work order de-escalation
+* Quote rejected
+* Work order escalated
+* Work order de-escalated
+* Work order has a new note
+* Work order cancelled
+* Work order recalled
+* Work order needs re-quoted
+* CPPM SLA approaching
 
 Setup
 =====
